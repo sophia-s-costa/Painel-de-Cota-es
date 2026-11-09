@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Cotações</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+        table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+        th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+        td.valor { text-align: right; font-variant-numeric: tabular-nums; }
+        .ok { background: #d4edda; padding: 10px; border-radius: 4px; }
+        .ok ul { margin: 0.5rem 0 0; }
+        .erro { background: #f8d7da; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Painel de Cotações</h1>
+
+    {% if sucesso %}
+        <div class="ok">
+            Cotações registradas:
+            <ul>
+                {% for r in registros %}
+                    <li><strong>{{ r.moeda_origem }}/{{ r.moeda_destino }}</strong> = R$ {{ r.valor }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% elif erro %}
+        <div class="erro">{{ erro }}</div>
+    {% endif %}
+
+    <p><a href="{% url 'consultar' %}">Consultar novamente</a></p>
+
+    <h2>Histórico de consultas</h2>
+    <p id="status-historico">Carregando histórico...</p>
+    <table id="tabela-historico" hidden>
+        <thead>
+            <tr><th>Par</th><th>Valor</th><th>Data/Hora</th></tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        const status = document.getElementById('status-historico');
+        const tabela = document.getElementById('tabela-historico');
+        const corpo = tabela.querySelector('tbody');
+
+        // Formata no padrão brasileiro: R$ 5,1234 / R$ 612.345,50
+        function formatarValor(valor, moeda) {
+            try {
+                return Number(valor).toLocaleString('pt-BR', {
+                    style: 'currency', currency: moeda,
+                    minimumFractionDigits: 2, maximumFractionDigits: 4
+                });
+            } catch (e) {
+                return moeda + ' ' + valor;   // moeda desconhecida: mostra o valor cru
+            }
+        }
+
+        fetch('/api/historico/')
+            .then(function (resposta) {
+                if (!resposta.ok) {
+                    throw new Error('HTTP ' + resposta.status);
+                }
+                return resposta.json();
+            })
+            .then(function (registros) {
+                if (registros.length === 0) {
+                    status.textContent = 'Nenhuma consulta registrada ainda.';
+                    return;
+                }
+                registros.forEach(function (r) {
+                    const linha = document.createElement('tr');
+                    const dados = [
+                        r.moeda_origem + '/' + r.moeda_destino,
+                        formatarValor(r.valor, r.moeda_destino),
+                        new Date(r.data_hora_consulta).toLocaleString('pt-BR')
+                    ];
+                    dados.forEach(function (texto, i) {
+                        const celula = document.createElement('td');
+                        celula.textContent = texto;   // textContent: nunca interpreta HTML
+                        if (i === 1) { celula.className = 'valor'; }
+                        linha.appendChild(celula);
+                    });
+                    corpo.appendChild(linha);
+                });
+                status.hidden = true;
+                tabela.hidden = false;
+            })
+            .catch(function (erro) {
+                status.textContent = 'Não foi possível carregar o histórico. Verifique sua conexão.';
+                console.error('Falha ao buscar histórico:', erro);
+            });
+    </script>
+</body>
+</html>
